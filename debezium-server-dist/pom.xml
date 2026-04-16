@@ -298,6 +298,25 @@
             </build>
         </profile>
         <profile>
+            <id>sqlserver-msal</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+                <property>
+                    <name>msal</name>
+                </property>
+            </activation>
+            <dependencies>
+                <!--
+                Add the Azure SQL authentication runtime subtree to the server distro when
+                SQL Server MSAL support is enabled for this branch.
+                -->
+                <dependency>
+                    <groupId>com.azure</groupId>
+                    <artifactId>azure-identity</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
             <id>include-non-core-connectors</id>
             <activation>
                 <property>
