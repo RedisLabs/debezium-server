@@ -166,7 +166,7 @@ public class DebeziumServer {
                 engine.run();
             }
             finally {
-                Quarkus.asyncExit(returnCode);
+                Quarkus.asyncExit(Math.max(returnCode, health.getCompletionExitCode()));
             }
         });
         LOGGER.info("Engine executor started");

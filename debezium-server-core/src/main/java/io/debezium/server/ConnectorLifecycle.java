@@ -23,7 +23,6 @@ import io.debezium.server.events.PollingStartedEvent;
 import io.debezium.server.events.PollingStoppedEvent;
 import io.debezium.server.events.TaskStartedEvent;
 import io.debezium.server.events.TaskStoppedEvent;
-import io.quarkus.runtime.Quarkus;
 
 /**
  * The server lifecycle listener that published CDI events based on the lifecycle changes and also provides
@@ -39,6 +38,7 @@ public class ConnectorLifecycle implements HealthCheck, DebeziumEngine.Connector
     private static final Logger LOGGER = LoggerFactory.getLogger(ConnectorLifecycle.class);
 
     private volatile boolean live = false;
+    private volatile int completionExitCode = 0;
 
     @Inject
     Event<ConnectorStartedEvent> connectorStartedEvent;
@@ -107,11 +107,15 @@ public class ConnectorLifecycle implements HealthCheck, DebeziumEngine.Connector
         else {
             LOGGER.error(logMessage, error);
         }
-        connectorCompletedEvent.fireAsync(new ConnectorCompletedEvent(success, message, error));
         if (!success) {
-            Quarkus.asyncExit(DebeziumServer.EXIT_CODE_ERROR);
+            completionExitCode = DebeziumServer.EXIT_CODE_ERROR;
         }
+        connectorCompletedEvent.fireAsync(new ConnectorCompletedEvent(success, message, error));
         live = false;
+    }
+
+    int getCompletionExitCode() {
+        return completionExitCode;
     }
 
     @Override
