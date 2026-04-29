@@ -1,0 +1,243 @@
+name: RDI Build
+
+on:
+  push:
+    branches:
+      - 'rdi/*'
+    tags:
+      - 'v*.Final-rdi.*'
+    paths-ignore:
+      - '*.md'
+  pull_request:
+    branches:
+      - 'rdi/*'
+    paths-ignore:
+      - '*.md'
+  workflow_dispatch:
+    inputs:
+      server_ref:
+        description: Optional server branch or tag to resolve
+        required: false
+        type: string
+      push_image:
+        description: Push the image to the configured registry
+        required: false
+        default: false
+        type: boolean
+      image_tag:
+        description: Optional image tag override
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      line_ref: ${{ steps.resolve.outputs.line_ref }}
+      line_slug: ${{ steps.resolve.outputs.line_slug }}
+      core_repo: ${{ steps.resolve.outputs.core_repo }}
+      core_ref: ${{ steps.resolve.outputs.core_ref }}
+      upstream_base_tag: ${{ steps.resolve.outputs.upstream_base_tag }}
+
+    steps:
+      - name: Checkout Debezium Server repository
+        uses: actions/checkout@v6
+        with:
+          path: server
+
+      - name: Resolve core repository and ref
+        id: resolve
+        shell: bash
+        run: |
+          server_ref="${{ github.event.inputs.server_ref || '' }}"
+          if [[ -z "${server_ref}" ]]; then
+            if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              server_ref="${{ github.base_ref }}"
+            else
+              server_ref="${{ github.ref_name }}"
+            fi
+          fi
+
+          bash ./server/.github/scripts/resolve-core-ref.sh "${server_ref}"
+
+      - name: Checkout mapped core repository
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ steps.resolve.outputs.core_repo }}
+          ref: ${{ steps.resolve.outputs.core_ref }}
+          path: core
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Cache Maven packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-rdi-${{ hashFiles('server/**/pom.xml', 'core/**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-m2-rdi-
+            ${{ runner.os }}-m2-
+
+      - name: Print resolved build inputs
+        run: |
+          echo "server_ref=${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}"
+          echo "line_ref=${{ steps.resolve.outputs.line_ref }}"
+          echo "core_repo=${{ steps.resolve.outputs.core_repo }}"
+          echo "core_ref=${{ steps.resolve.outputs.core_ref }}"
+          echo "upstream_base_tag=${{ steps.resolve.outputs.upstream_base_tag }}"
+
+      - name: Maven build core
+        run: ./server/mvnw clean install -f core/pom.xml -DskipTests -DskipITs -Dformat.formatter.goal=validate -Dformat.imports.goal=check -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.httpconnectionManager.ttlSeconds=120
+
+      - name: Maven build Debezium Server
+        run: ./server/mvnw clean install -fae -f server/pom.xml -Passembly -Dformat.formatter.goal=validate -Dformat.imports.goal=check -Dhttp.keepAlive=false -Dmaven.wagon.http.pool=false -Dmaven.wagon.httpconnectionManager.ttlSeconds=120 -DskipNonCore
+
+      - name: Archive Debezium distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: debezium-server-dist-${{ steps.resolve.outputs.line_slug }}
+          path: ./server/debezium-server-dist/target/debezium-server-dist*.tar.gz
+
+  image:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Debezium Server repository
+        uses: actions/checkout@v6
+        with:
+          path: server
+
+      - name: Download Debezium distribution artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: debezium-server-dist-${{ needs.build.outputs.line_slug }}
+          path: ./server/debezium-server-dist/target
+
+      - name: Resolve image coordinates
+        id: image_meta
+        shell: bash
+        env:
+          IMAGE_REGISTRY: artifactory.dev.redislabs.com
+          IMAGE_REPOSITORY: rdi-docker-dev/debezium-server
+          IMAGE_USERNAME: ${{ vars.ARTIFACTORY_USERNAME }}
+          IMAGE_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}
+        run: |
+          push_requested="false"
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            push_requested="true"
+          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "branch" ]]; then
+            push_requested="true"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.push_image }}" == "true" ]]; then
+            push_requested="true"
+          fi
+
+          registry_configured="false"
+          if [[ -n "${IMAGE_REGISTRY}" && -n "${IMAGE_REPOSITORY}" && -n "${IMAGE_USERNAME}" && -n "${IMAGE_PASSWORD}" ]]; then
+            registry_configured="true"
+          fi
+
+          if [[ -n "${{ github.event.inputs.image_tag || '' }}" ]]; then
+            image_tag="${{ github.event.inputs.image_tag }}"
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
+            image_tag="${GITHUB_REF_NAME#v}"
+          else
+            image_tag="${{ needs.build.outputs.line_slug }}-${GITHUB_SHA::12}"
+          fi
+
+          alias_tag=""
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            alias_tag="${{ needs.build.outputs.line_slug }}"
+          fi
+
+          should_push="false"
+          if [[ "${push_requested}" == "true" ]]; then
+            if [[ "${registry_configured}" != "true" ]]; then
+              echo "Registry push was requested but RDI image registry settings are incomplete." >&2
+              exit 1
+            fi
+            should_push="true"
+          fi
+
+          echo "push_requested=${push_requested}" >> "$GITHUB_OUTPUT"
+          echo "registry_configured=${registry_configured}" >> "$GITHUB_OUTPUT"
+          echo "should_push=${should_push}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
+          echo "alias_tag=${alias_tag}" >> "$GITHUB_OUTPUT"
+          if [[ "${registry_configured}" == "true" ]]; then
+            echo "image_ref=${IMAGE_REGISTRY}/${IMAGE_REPOSITORY}:${image_tag}" >> "$GITHUB_OUTPUT"
+            if [[ -n "${alias_tag}" ]]; then
+              echo "image_alias_ref=${IMAGE_REGISTRY}/${IMAGE_REPOSITORY}:${alias_tag}" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Resolve distro tarball path
+        id: dist_tarball
+        shell: bash
+        run: |
+          tarball_path="$(find ./server/debezium-server-dist/target -maxdepth 1 -name 'debezium-server-dist*.tar.gz' | head -n1)"
+          if [[ -z "${tarball_path}" ]]; then
+            echo "Could not find Debezium Server distribution tarball." >&2
+            exit 1
+          fi
+
+          context_relative_path="${tarball_path#./server/}"
+          echo "tarball_path=${context_relative_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to image registry
+        if: ${{ steps.image_meta.outputs.should_push == 'true' }}
+        uses: docker/login-action@v3
+        with:
+          registry: artifactory.dev.redislabs.com
+          username: ${{ vars.ARTIFACTORY_USERNAME }}
+          password: ${{ secrets.ARTIFACTORY_PASSWORD }}
+
+      - name: Build RDI Debezium Server image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          file: ./server/container/server/3.5/Dockerfile
+          build-args: |
+            SERVER_DIST_TARBALL=${{ steps.dist_tarball.outputs.tarball_path }}
+          platforms: linux/amd64
+          load: ${{ steps.image_meta.outputs.should_push != 'true' }}
+          push: ${{ steps.image_meta.outputs.should_push == 'true' }}
+          tags: |
+            ${{ steps.image_meta.outputs.registry_configured == 'true' && steps.image_meta.outputs.image_ref || format('debezium-server-rdi:{0}', steps.image_meta.outputs.image_tag) }}
+            ${{ steps.image_meta.outputs.image_alias_ref || '' }}
+
+      - name: Record image result
+        shell: bash
+        run: |
+          {
+            echo "image_tag=${{ steps.image_meta.outputs.image_tag }}"
+            echo "push_requested=${{ steps.image_meta.outputs.push_requested }}"
+            echo "registry_configured=${{ steps.image_meta.outputs.registry_configured }}"
+            echo "should_push=${{ steps.image_meta.outputs.should_push }}"
+            echo "alias_tag=${{ steps.image_meta.outputs.alias_tag }}"
+            echo "dist_tarball=${{ steps.dist_tarball.outputs.tarball_path }}"
+            if [[ -n "${{ steps.image_meta.outputs.image_ref }}" ]]; then
+              echo "image_ref=${{ steps.image_meta.outputs.image_ref }}"
+            fi
+            if [[ -n "${{ steps.image_meta.outputs.image_alias_ref }}" ]]; then
+              echo "image_alias_ref=${{ steps.image_meta.outputs.image_alias_ref }}"
+            fi
+          } > image-result.txt
+
+      - name: Archive image metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: debezium-server-image-${{ needs.build.outputs.line_slug }}
+          path: image-result.txt

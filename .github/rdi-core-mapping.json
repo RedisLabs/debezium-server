@@ -1,0 +1,9 @@
+{
+  "lines": {
+    "rdi/3.5": {
+      "upstream_base_tag": "v3.5.0.Final",
+      "core_repo": "debezium/debezium",
+      "core_ref": "v3.5.0.Final"
+    }
+  }
+}
