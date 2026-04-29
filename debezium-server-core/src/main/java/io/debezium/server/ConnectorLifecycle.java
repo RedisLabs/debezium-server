@@ -38,6 +38,7 @@ public class ConnectorLifecycle implements HealthCheck, DebeziumEngine.Connector
     private static final Logger LOGGER = LoggerFactory.getLogger(ConnectorLifecycle.class);
 
     private volatile boolean live = false;
+    private volatile int completionExitCode = 0;
 
     @Inject
     Event<ConnectorStartedEvent> connectorStartedEvent;
@@ -106,8 +107,15 @@ public class ConnectorLifecycle implements HealthCheck, DebeziumEngine.Connector
         else {
             LOGGER.error(logMessage, error);
         }
+        if (!success) {
+            completionExitCode = DebeziumServer.EXIT_CODE_ERROR;
+        }
         connectorCompletedEvent.fireAsync(new ConnectorCompletedEvent(success, message, error));
         live = false;
+    }
+
+    int getCompletionExitCode() {
+        return completionExitCode;
     }
 
     @Override

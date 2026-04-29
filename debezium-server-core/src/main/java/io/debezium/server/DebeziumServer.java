@@ -62,7 +62,7 @@ public class DebeziumServer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DebeziumServer.class);
 
-    private static final int EXIT_CODE_ERROR = 1;
+    static final int EXIT_CODE_ERROR = 1;
 
     private static final String PROP_PREFIX = "debezium.";
     static final String PROP_SOURCE_PREFIX = PROP_PREFIX + "source.";
@@ -166,7 +166,7 @@ public class DebeziumServer {
                 engine.run();
             }
             finally {
-                Quarkus.asyncExit(returnCode);
+                Quarkus.asyncExit(Math.max(returnCode, health.getCompletionExitCode()));
             }
         });
         LOGGER.info("Engine executor started");
