@@ -92,26 +92,24 @@ public class RedisSchemaHistoryIT {
         Testing.Print.enable();
 
         Jedis jedis = new Jedis(HostAndPort.from(RedisTestResourceLifecycleManager.getRedisContainerAddress()));
-        // Finish initial schema persistence before pausing Redis to avoid blocking the MySQL snapshot lock.
-        TestUtils.awaitStreamLengthGte(jedis, STREAM_NAME, INIT_HISTORY_SIZE);
+        // wait until the db schema history is written for the first time
+        TestUtils.awaitStreamLengthGte(jedis, STREAM_NAME, 1);
 
         // pause container
         Testing.print("Pausing container");
         RedisTestResourceLifecycleManager.pause();
 
-        try (JdbcConnection connection = getMySqlConnection()) {
-            connection.connect();
-            Testing.print("Creating new redis_test table and inserting 5 records to it");
-            connection.execute("CREATE TABLE IF NOT EXISTS inventory.redis_test (id INT PRIMARY KEY)");
-            Testing.print("Table created");
+        final JdbcConnection connection = getMySqlConnection();
+        connection.connect();
+        Testing.print("Creating new redis_test table and inserting 5 records to it");
+        connection.execute("CREATE TABLE IF NOT EXISTS inventory.redis_test (id INT PRIMARY KEY)");
+        Testing.print("Table created");
+        connection.close();
 
-            Testing.print("Sleeping for 2 seconds to flush records");
-            Thread.sleep(2000);
-        }
-        finally {
-            Testing.print("Unpausing container");
-            RedisTestResourceLifecycleManager.unpause();
-        }
+        Testing.print("Sleeping for 2 seconds to flush records");
+        Thread.sleep(2000);
+        Testing.print("Unpausing container");
+        RedisTestResourceLifecycleManager.unpause();
 
         // wait until the db schema history is written for the first time
         TestUtils.awaitStreamLengthGte(jedis, STREAM_NAME, INIT_HISTORY_SIZE + 1);
