@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi8/openjdk-21 AS builder
+FROM registry.access.redhat.com/ubi8/openjdk-21@sha256:bba7f720dc3a368e657fa12c99740910e86fd7ef69c62ce7aeda569b9589ffaa AS builder
 
 LABEL maintainer="Redis RDI"
 
@@ -6,8 +6,8 @@ ARG SERVER_DIST_TARBALL
 ARG OTEL_ENABLED=true
 
 ENV SERVER_HOME=/debezium \
-    OPENTELEMETRY_AGENT_VERSION=2.25.0 \
-    OPENTELEMETRY_MD5=a7f1cbab5448e61d93e71ffdff9175b6
+    OPENTELEMETRY_AGENT_VERSION=2.26.1 \
+    OPENTELEMETRY_MD5=ea9cb308a0bc152da43089bd00f216e4
 
 USER root
 RUN microdnf -y install gzip && \
@@ -36,7 +36,7 @@ RUN if [ "$OTEL_ENABLED" = "true" ]; then \
 
 RUN chmod -R g+w,o+w "$SERVER_HOME"
 
-FROM registry.access.redhat.com/ubi8/openjdk-21
+FROM registry.access.redhat.com/ubi8/openjdk-21@sha256:bba7f720dc3a368e657fa12c99740910e86fd7ef69c62ce7aeda569b9589ffaa
 
 LABEL maintainer="Redis RDI"
 
@@ -44,7 +44,8 @@ ENV SERVER_HOME=/debezium \
     OTEL_SDK_DISABLED=true
 
 USER root
-RUN microdnf clean all
+RUN microdnf -y update && \
+    microdnf clean all
 
 USER jboss
 

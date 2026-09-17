@@ -12,8 +12,18 @@
     <packaging>jar</packaging>
 
     <properties>
-        <version.kinesis>2.17.241</version.kinesis>
-        <version.sqs>2.13.13</version.sqs>
+        <quarkus.version.runtime>3.27.5.2</quarkus.version.runtime>
+        <version.kafka>4.1.2</version.kafka>
+        <version.jetty>12.0.36</version.jetty>
+        <version.netty>4.1.138.Final</version.netty>
+        <version.bouncycastle>2.73.12</version.bouncycastle>
+        <version.grpc>1.75.0</version.grpc>
+        <version.okhttp>4.9.2</version.okhttp>
+        <version.rabbitmq>5.33.1</version.rabbitmq>
+        <version.aws>2.54.20</version.aws>
+        <version.postgresql.driver>42.7.13</version.postgresql.driver>
+        <version.kinesis>${version.aws}</version.kinesis>
+        <version.sqs>${version.aws}</version.sqs>
         <version.pubsub>26.17.0</version.pubsub>
         <version.pulsar>4.1.2</version.pulsar>
         <version.milvus>2.5.4</version.milvus>
@@ -50,6 +60,51 @@
                 <artifactId>kafka-clients</artifactId>
                 <version>${version.kafka}</version>
             </dependency>
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>connect-api</artifactId>
+                <version>${version.kafka}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>connect-runtime</artifactId>
+                <version>${version.kafka}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>connect-json</artifactId>
+                <version>${version.kafka}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>connect-file</artifactId>
+                <version>${version.kafka}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>connect-transforms</artifactId>
+                <version>${version.kafka}</version>
+            </dependency>
+            <dependency>
+                <groupId>at.yawk.lz4</groupId>
+                <artifactId>lz4-java</artifactId>
+                <version>1.11.3</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-lts8on</artifactId>
+                <version>${version.bouncycastle}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.rabbitmq</groupId>
+                <artifactId>amqp-client</artifactId>
+                <version>${version.rabbitmq}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>okhttp</artifactId>
+                <version>${version.okhttp}</version>
+            </dependency>
 
             <!-- This needs to be defined before Quarkus to guarantee that the
                  right Infinispan dependencies are imported -->
@@ -71,6 +126,49 @@
                 <groupId>org.glassfish.jaxb</groupId>
                 <artifactId>txw2</artifactId>
                 <version>${version.jaxb.implementation}</version>
+            </dependency>
+
+            <!-- Keep all Netty modules aligned with the security-fixed release -->
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-bom</artifactId>
+                <version>${version.netty}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-bom</artifactId>
+                <version>${version.jetty}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.jetty.ee10</groupId>
+                <artifactId>jetty-ee10-servlet</artifactId>
+                <version>${version.jetty}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.jetty.ee10</groupId>
+                <artifactId>jetty-ee10-servlets</artifactId>
+                <version>${version.jetty}</version>
+            </dependency>
+
+            <!-- Align all AWS SDK modules, including shaded Jackson. -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${version.aws}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-bom</artifactId>
+                <version>${version.grpc}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <!-- Quarkus dependencies -->
