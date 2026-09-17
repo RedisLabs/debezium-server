@@ -23,7 +23,6 @@
     <properties>
         <!-- Support all log levels in Debezium Server -->
         <quarkus.log.min-level>TRACE</quarkus.log.min-level>
-        <quarkus.version.runtime>3.27.5.2</quarkus.version.runtime>
 
         <!-- Debezium parent -->
         <version.debezium>${project.version}</version.debezium>
